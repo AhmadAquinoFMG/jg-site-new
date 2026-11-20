@@ -151,9 +151,9 @@ instead of coming back as a 422 from the final Submit.
   - `?test=fmg_true` — `funnel.js` copies the param into a hidden `test` field
     and `submit.php` compares it to `TEST_MODE_TOKEN` (empty disables it).
   - `?affid=300` — JG's test affiliate id (`TEST_MODE_AFFIDS`), so their QA link
-    `?oid=914&affid=300` needs no extra param. Matched on **affid only**: `914`
-    is the live first-party *offer* id that real links carry too
-    (`?oid=914&affid=989`), so treating it as a test marker would flag genuine
+    `?oid=1072&affid=300` needs no extra param. Matched on **affid only**: `1072`
+    is the live *offer* id that real links carry too
+    (`?oid=1072&affid=1225`), so treating it as a test marker would flag genuine
     leads as tests.
 
   The post happens even when `LEADPROSPER_MODE=off`. The campaign requires
@@ -161,15 +161,15 @@ instead of coming back as a 422 from the final Submit.
   `300`) substituted **into the post only** — an `?affid=` actually on the URL
   always wins, and the stored lead is untouched. QA rows are identifiable
   afterwards by `leads.lp_mode = 'test'`.
-- **Everflow** — fully client-side; no server-side postback. The `?affid=` on the
-  landing URL decides the offer (`includes/everflow.php`, table in
-  `config.php ['everflow']`): a first-party affid
-  (`EVERFLOW_FIRST_PARTY_AFFIDS`, default `989,995,1024`) routes to offer **914**,
-  any other affid to **915**, and **no affid means Everflow is never contacted** —
-  the SDK isn't even loaded. Example link:
-  `https://jgdebtrelief.com/?oid=914&affid=989`. Note the offer is derived from
-  `affid`, not from `?oid=` — `oid` is still captured and forwarded to LeadProsper
-  but has no say in routing.
+- **Everflow** — fully client-side; no server-side postback. This site serves
+  **one offer only: 1072** (*JG Debt Relief - WL Lead Gen Campaign - Bid on
+  Calls CPL*), hardcoded in `config.php ['everflow']['offer_id']` with no env or
+  URL override. Any `?affid=` clicks and converts on 1072; **no affid means
+  Everflow is never contacted** — the SDK isn't even loaded. Example link:
+  `https://jgdebtrelief.com/?oid=1072&affid=1225`. `?oid=` is still captured and
+  forwarded to LeadProsper but has no say in routing. Decline offerwall CTAs
+  carry `sub8=1585` (1072's Decline Offer Revenue event) and
+  `sub9=1072_jg_bid_on_calls_cpl`.
   - *Click* — `assets/js/tracking/everflow.js`, lazy-loaded on first
     interaction/4s timeout/form submit. Writes `affid` + `ef_transaction_id` into
     hidden fields that ride along with the lead to LeadProsper.

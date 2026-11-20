@@ -657,10 +657,7 @@ $og_image         = $origin . '/assets/img/og-image.png?v=' . $cfg['asset_versio
             // move in the numbers can be pinned to the release that caused it.
             assetVersion: <?= json_encode((string) ($cfg['asset_version'] ?? ''), JSON_UNESCAPED_SLASHES) ?>,
             everflow: {
-                offerFirstParty: <?= json_encode((string) ($cfg['everflow']['offer_first_party'] ?? ''), JSON_UNESCAPED_SLASHES) ?>,
-                offerThirdParty: <?= json_encode((string) ($cfg['everflow']['offer_third_party'] ?? ''), JSON_UNESCAPED_SLASHES) ?>,
-                clickOfferOverrides: <?= json_encode(array_map('strval', $cfg['everflow']['click_offer_overrides'] ?? []), JSON_UNESCAPED_SLASHES) ?>,
-                firstPartyAffids: <?= json_encode(array_map('strval', $cfg['everflow']['first_party_affids'] ?? []), JSON_UNESCAPED_SLASHES) ?>,
+                offerId: <?= json_encode((string) ($cfg['everflow']['offer_id'] ?? ''), JSON_UNESCAPED_SLASHES) ?>,
                 domain: <?= json_encode($cfg['everflow']['domain'] ?? 'www.f0cg2trk.com', JSON_UNESCAPED_SLASHES) ?>
             },
             attribution: <?= json_encode($cfg['attribution'] ?? [], JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT) ?>

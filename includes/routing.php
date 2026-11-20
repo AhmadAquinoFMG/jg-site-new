@@ -206,13 +206,11 @@ function offerwall_attribution_keys(): array
  * that value; unmapped affiliates get nothing.
  *
  * sub7/sub8/sub9: the parent Everflow click (needs oid, affid and click id).
- * Match the landing SDK's offer resolution: an allowlisted ?oid= (1067 email,
- * see config click_offer_overrides) picks the offer; otherwise affid decides 914 vs 915.
- * sub7 is the click id. sub8 is the decline event: 1567 for 1067, 1550
- * first-party, 1551 third-party. sub9 names the parent Everflow offer as
- * <id>_<name> (914_jg_1st_party / 915_jg_3rd_party / 1067_jg_email), always the
- * offer the sub7 click was recorded on. An offer with no configured name leaves
- * sub9 untouched.
+ * The site has one offer (config everflow.offer_id, 1072), the same one the
+ * landing SDK clicks on. sub7 is the click id. sub8 is that offer's decline
+ * event (everflow.decline_event_id, 1585). sub9 names the parent offer as
+ * <id>_<name> (1072_jg_bid_on_calls_cpl). A missing event id or name leaves
+ * that sub untouched.
  *
  * Preserve other query values and fragments, replacing any existing copy of a
  * sub this sets rather than duplicating it.
@@ -233,13 +231,14 @@ function decline_offerwall_cta_url(string $url, array $lead, array $everflow): s
 
     $clickId = $read('ef_transaction_id') ?: $read('transaction_id');
     if ($read('oid') !== '' && $clickId !== '') {
-        $isFirstParty = in_array($affid, $everflow['first_party_affids'] ?? [], true);
         $parentOfferId = (string) everflow_offer_for_affid($affid, $everflow, $read('oid'));
         $set['sub7'] = $clickId;
-        // Decline event: 1567 for the email offer (1067), else the affid split.
-        $set['sub8'] = $parentOfferId === '1067' ? '1567' : ($isFirstParty ? '1550' : '1551');
-        $parentOfferName = trim((string) ($everflow['offer_names'][$parentOfferId] ?? ''));
-        if ($parentOfferName !== '') {
+        $declineEvent = trim((string) ($everflow['decline_event_id'] ?? ''));
+        if ($declineEvent !== '') {
+            $set['sub8'] = $declineEvent;
+        }
+        $parentOfferName = trim((string) ($everflow['offer_name'] ?? ''));
+        if ($parentOfferId !== '' && $parentOfferName !== '') {
             $set['sub9'] = $parentOfferId . '_' . $parentOfferName;
         }
     }

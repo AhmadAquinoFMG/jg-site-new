@@ -5,8 +5,9 @@ import vm from 'node:vm';
 
 // Read the actual public config; execute only a stubbed SDK, with no network calls.
 const config = JSON.parse(execFileSync('php', ['-r',
-    '$c = require "config.php"; $e = $c["everflow"]; echo json_encode(["offerFirstParty"=>$e["offer_first_party"], "offerThirdParty"=>$e["offer_third_party"], "firstPartyAffids"=>$e["first_party_affids"], "clickOfferOverrides"=>$e["click_offer_overrides"]]);'
+    '$c = require "config.php"; $e = $c["everflow"]; echo json_encode(["offerId"=>$e["offer_id"]]);'
 ], { encoding: 'utf8' }));
+assert.equal(config.offerId, '1072', 'This site serves offer 1072 only');
 
 for (const file of ['assets/js/tracking/everflow.js', 'assets/dist/everflow.min.js']) {
     const source = readFileSync(file, 'utf8');
@@ -40,20 +41,18 @@ for (const file of ['assets/js/tracking/everflow.js', 'assets/dist/everflow.min.
         return clicks;
     }
 
-    assert.equal(run('?oid=915&affid=300')[0].offer_id, '915');
-    const click = run('?oid=1067&affid=300')[0];
-    assert.equal(click.offer_id, '1067');
-    assert.equal(click.affiliate_id, '300');
-    assert.equal(run('?oid=1067&affid=300').length, 0, 'Reload must not duplicate click');
-    assert.equal(run('?oid=915&affid=300').length, 0, 'Prior offer remains deduplicated');
+    const click = run('?oid=1072&affid=1225')[0];
+    assert.equal(click.offer_id, '1072');
+    assert.equal(click.affiliate_id, '1225');
+    assert.equal(run('?oid=1072&affid=1225').length, 0, 'Reload must not duplicate click');
     storage.clear();
-    assert.equal(run('?affid=300')[0].offer_id, '915');
-    storage.clear();
-    assert.equal(run('?oid=9999&affid=300')[0].offer_id, '915');
-    storage.clear();
-    assert.equal(run('?affid=989')[0].offer_id, '914');
-    assert.equal(run('?oid=1067&affid=989')[0].offer_id, '1067');
-    assert.equal(run('?oid=1067').length, 0, 'An affiliate is required');
+    // Any other oid, or none, still clicks on 1072.
+    for (const search of ['?affid=300', '?oid=914&affid=989', '?oid=915&affid=300', '?oid=1067&affid=300', '?oid=9999&affid=300']) {
+        storage.clear();
+        assert.equal(run(search)[0].offer_id, '1072', `${search} must click on 1072`);
+    }
+    assert.equal(run('?oid=1072').length, 0, 'An affiliate is required');
+    assert.equal(run('').length, 0, 'No params, no Everflow');
 
     // Cookie fallback (SDK without a promise). Returns the transaction id the
     // form would post, given the cookies present.
@@ -79,8 +78,8 @@ for (const file of ['assets/js/tracking/everflow.js', 'assets/dist/everflow.min.
         return fields.efTransactionId.value;
     }
     const stale915 = 'ef_tid_c_o_915=a|b|old915';
-    assert.equal(runCookie('?oid=1067&affid=300', stale915), '', '1067 must never take a 914/915 transaction id');
-    assert.equal(runCookie('?oid=1067&affid=300', `${stale915}; ef_tid_c_o_1067=x|new1067`), 'new1067', '1067 uses its own cookie');
-    assert.equal(runCookie('?affid=300', 'ef_tid_other=z|any'), 'any', 'Non-override offers keep the any-cookie fallback');
+    assert.equal(runCookie('?affid=1225', stale915), '', '1072 must never take another offer\'s transaction id');
+    assert.equal(runCookie('?affid=1225', 'ef_tid_other=z|any'), '', 'No any-cookie fallback');
+    assert.equal(runCookie('?affid=1225', `${stale915}; ef_tid_c_o_1072=x|new1072`), 'new1072', '1072 uses its own cookie');
     console.log(`${file}: offer selection, deduplication, and transaction handoff passed.`);
 }

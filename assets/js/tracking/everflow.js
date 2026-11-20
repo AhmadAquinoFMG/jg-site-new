@@ -5,24 +5,22 @@
    transaction id into the funnel's hidden ef_transaction_id field so it rides
    along with the lead to LeadProsper.
 
-   Which offer? Uses window.FUNNEL.everflow, from
-   config.php ['everflow']:
+   Which offer? Always window.FUNNEL.everflow.offerId, from config.php
+   ['everflow']['offer_id'] — this site serves one offer only (1072, JG Debt
+   Relief - WL Lead Gen Campaign - Bid on Calls CPL). The link's ?oid= is
+   ignored, so no link can move a click onto another offer.
 
-     oid in clickOfferOverrides -> use that offer (1067); affid still required
-     affid in firstPartyAffids -> offerFirstParty (914)
-     affid present, not listed -> offerThirdParty (915)
-     affid absent/empty        -> hard stop. We return before loading anything,
-                                  so the SDK never even hits the network and no
-                                  click is fired. Unattributed traffic must not
-                                  reach Everflow at all.
+     affid present      -> click on offerId
+     affid absent/empty -> hard stop. We return before loading anything, so the
+                           SDK never even hits the network and no click is
+                           fired. Unattributed traffic must not reach Everflow.
 
    The EF.click() field list below (source_id, sub1-10, uid, transaction_id) is
    the shape Everflow's dashboard snippet uses for this offer — don't "clean it
    up" against a different integration. What differs from that raw snippet is
-   deliberate: only explicitly allowed OIDs override the affid mapping, so a
-   missing or unlisted oid still resolves to the existing 914/915 default,
-   and the whole thing is lazy-loaded on first interaction / 4s / form submit so
-   a zero-interaction bounce never loads it — fine on a CPA model, since bounces
+   deliberate: the offer is fixed rather than read from the URL, and the whole
+   thing is lazy-loaded on first interaction / 4s / form submit so a
+   zero-interaction bounce never loads it — fine on a CPA model, since bounces
    don't convert anyway.
 
    Conversion is NOT here, and is not fired client-side at all right now:
@@ -36,24 +34,15 @@
     // Read affid ourselves rather than via EF.urlParameter(): the gate has to be
     // decidable before we decide whether to load the SDK at all.
     var affiliateId = '';
-    var requestedOfferId = '';
     try {
-        var params = new URLSearchParams(location.search);
-        affiliateId = (params.get('affid') || '').trim();
-        requestedOfferId = (params.get('oid') || '').trim();
+        affiliateId = (new URLSearchParams(location.search).get('affid') || '').trim();
     } catch (e) {
         affiliateId = '';
     }
     if (!affiliateId) return; // unattributed — nothing goes to Everflow
 
-    var firstParty = cfg.firstPartyAffids || [];
-    var offerId = firstParty.indexOf(affiliateId) !== -1
-        ? cfg.offerFirstParty
-        : cfg.offerThirdParty;
-    if ((cfg.clickOfferOverrides || []).indexOf(requestedOfferId) !== -1) {
-        offerId = requestedOfferId;
-    }
-    if (!offerId) return; // offer ids not configured — fail closed, don't guess
+    var offerId = String(cfg.offerId || '');
+    if (!offerId) return; // offer id not configured — fail closed, don't guess
 
     // Hand the resolved transaction id to the form so it posts with the lead.
     function writeTransactionId(transactionId) {
@@ -71,25 +60,19 @@
         })();
     }
 
-    // An override offer (1067 email) must convert on that offer only. The
-    // any-ef_tid_ fallback below would hand it a leftover 914/915 click from an
-    // earlier visit, and LeadProsper's conversion would then land on 914/915.
-    var ownCookieOnly = (cfg.clickOfferOverrides || []).indexOf(offerId) !== -1;
-
     // Fallback for SDK builds where EF.click() doesn't return a promise: poll for
-    // the tracking cookie until its value stops changing, then take the last
-    // pipe-delimited segment. Prefers this offer's own cookie and, except for
-    // override offers, falls back to any ef_tid_ cookie rather than guessing at
-    // prefix naming.
+    // this offer's own tracking cookie until its value stops changing, then take
+    // the last pipe-delimited segment. Own cookie ONLY: any other ef_tid_ cookie
+    // is a leftover click on a different offer (e.g. an older 914/915 visit),
+    // and handing that id to the lead would make LeadProsper's conversion land
+    // on the wrong offer instead of this one.
     function watchCookie() {
         var attempts = 0, lastSeen = '', stable = 0;
         var interval = setInterval(function () {
             var cookies = document.cookie.split(';').map(function (c) { return c.trim(); });
             var match = cookies.filter(function (c) {
                 return c.indexOf('ef_tid_c_o_' + offerId + '=') === 0;
-            })[0] || (ownCookieOnly ? undefined : cookies.filter(function (c) {
-                return c.indexOf('ef_tid_') === 0;
-            })[0]);
+            })[0];
 
             if (match) {
                 var rawValue = match.split('=')[1] || '';

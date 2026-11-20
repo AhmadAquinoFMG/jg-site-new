@@ -8,11 +8,11 @@
     "min": "assets/dist/attribution.min.js"
   },
   "assets/js/tracking/everflow.js": {
-    "sha1": "9d5f7e1b8984c1763d60f050b2ef7059c6f078ce",
+    "sha1": "17fbe5215bc402b171af3eac6be87a0d4ee01628",
     "min": "assets/dist/everflow.min.js"
   },
   "assets/css/style.css": {
-    "sha1": "188b717ca9fd434632cba511638f12ec72483ef6",
+    "sha1": "f05c340f9141b53222501bd068c20fd1bcac4a34",
     "min": "assets/dist/style.min.css"
   },
   "assets/fonts/poppins-v24/faces.css": {

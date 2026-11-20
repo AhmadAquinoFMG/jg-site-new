@@ -359,7 +359,7 @@ return [
     // JG's own test affiliate id does the same thing without the param, so
     // their QA link is a test lead as it stands:
     //
-    //   https://jgdebtrelief.com/?oid=914&affid=300
+    //   https://jgdebtrelief.com/?oid=1072&affid=300
     //
     // An empty TEST_MODE_TOKEN turns the ?test= half off (no value of ?test=
     // can then flag anything); an empty TEST_MODE_AFFIDS turns the affid half
@@ -372,10 +372,10 @@ return [
         // on the URL.
         //
         // Deliberately affid ONLY — the ?oid= on that link is NOT part of the
-        // check. 914 is the live first-party OFFER id (EVERFLOW_OFFER_FIRST_PARTY
-        // above); real first-party links carry it too (?oid=914&affid=989), so
-        // treating it as a test marker would flag genuine leads as tests and
-        // stop them being billed or delivered.
+        // check. 1072 is the live OFFER id (config ['everflow']['offer_id']);
+        // real links carry it too (?oid=1072&affid=1225), so treating it as a
+        // test marker would flag genuine leads as tests and stop them being
+        // billed or delivered.
         'affids' => array_values(array_filter(array_map(
             'trim',
             explode(',', env('TEST_MODE_AFFIDS', ''))
@@ -440,18 +440,17 @@ return [
     ],
 
     // ---- Everflow affiliate tracking (client-side click + conversion) ----
-    // An explicitly allowed ?oid= overrides the default click offer below.
-    // Otherwise, ?affid= on the landing URL selects the offer:
+    // This site serves exactly ONE Everflow offer:
     //
-    //   affid in first_party_affids  -> offer_first_party  (914, 1st party traffic)
-    //   affid present, not in list   -> offer_third_party  (915, 3rd party traffic)
-    //   affid absent/empty           -> Everflow is not touched at all. The SDK
-    //                                   is never even loaded, no click, no
-    //                                   conversion. Traffic we can't attribute
-    //                                   must not reach Everflow.
+    //   1072  JG Debt Relief - WL Lead Gen Campaign - Bid on Calls CPL
     //
-    // Only click_offer_overrides can override the affid mapping. Missing or
-    // unlisted OIDs keep the existing 914/915 defaults. An affid is still required.
+    // Hardcoded on purpose (no env override, no ?oid= override): every click
+    // and conversion lands on 1072, whatever the affid or the link's oid say.
+    //
+    //   affid present      -> offer 1072
+    //   affid absent/empty -> Everflow is not touched at all. The SDK is never
+    //                         even loaded, no click, no conversion. Traffic we
+    //                         can't attribute must not reach Everflow.
     //
     // Click fires on the landing page (assets/js/tracking/everflow.js), which
     // then writes the resolved transaction id into the ef_transaction_id hidden
@@ -459,20 +458,13 @@ return [
     // LEADPROSPER_TRACKING_PARAMS). Conversion fires on thank-you.php against
     // the same offer, using the affid submit.php stashed in the session.
     'everflow' => [
-        'offer_first_party' => env('EVERFLOW_OFFER_FIRST_PARTY', '914'),
-        'offer_third_party' => env('EVERFLOW_OFFER_THIRD_PARTY', '915'),
-        'click_offer_overrides' => ['1067'],
-        // Slugs sent as sub9=<offer id>_<name> on decline offerwall CTAs (see
-        // decline_offerwall_cta_url()). Keep them URL-safe: lowercase, underscores.
-        'offer_names' => [
-            '914' => 'jg_1st_party',
-            '915' => 'jg_3rd_party',
-            '1067' => 'jg_email',
-        ],
-        'first_party_affids' => array_values(array_filter(array_map(
-            'trim',
-            explode(',', env('EVERFLOW_FIRST_PARTY_AFFIDS', '989,995,1024,1192'))
-        ), fn($v) => $v !== '')),
+        'offer_id'   => '1072',
+        // Sent as sub9=<offer id>_<name> on decline offerwall CTAs (see
+        // decline_offerwall_cta_url()). Keep it URL-safe: lowercase, underscores.
+        'offer_name' => 'jg_bid_on_calls_cpl',
+        // Offer 1072's "Decline Offer Revenue" event, sent as sub8 on decline
+        // offerwall CTAs.
+        'decline_event_id' => '1585',
         'domain' => env('EVERFLOW_DOMAIN', 'www.f0cg2trk.com'),
 
         // affid => the sub (sub1-sub5) that partner's Everflow GLOBAL postback
@@ -753,6 +745,9 @@ return [
         // 550x68 (2x the 34px-high footer render) for browsers that take AVIF.
         'logo_footer_avif' => 'assets/img/footer-logo-550.avif',
         'phone'        => '1-888-510-3795',
+        // Header click-to-call button (includes/header.php). Separate from
+        // 'phone' so the CTA can carry its own tracking number.
+        'cta_phone'    => '1-855-697-3884',
         'dept'         => 'Debt Solutions',
         'address'      => ['1200 Morris Drive', 'Chesterbrook, PA 19087'],
         'copyright'    => 'Copyright © 2026 The JG Wentworth Company. All rights reserved',

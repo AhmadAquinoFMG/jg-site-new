@@ -314,8 +314,8 @@ if ($cgOn) {
     </script>
     <script src="<?= $e(asset_min('assets/js/tracking/attribution.js')) ?>?v=<?= $e($cfg['asset_version']) ?>"></script>
 
-    <?php /* Everflow conversion — fires against the offer this lead's affid maps
-             to (914 first party / 915 third party). Rendered only when an affid
+    <?php /* Everflow conversion — fires against the site's one offer (config
+             ['everflow']['offer_id'], 1072). Rendered only when an affid
              was stashed at submit; unattributed leads emit nothing at all.
 
              transaction_id is passed explicitly when the landing-page click

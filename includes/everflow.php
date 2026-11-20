@@ -7,8 +7,8 @@
  * so the click (index.php -> assets/js/tracking/everflow.js) and the conversion
  * (thank-you.php) can never disagree and fire against different offers.
  *
- * The answer comes from affid alone — see config.php ['everflow'] for why, and
- * for the affid -> offer table itself.
+ * This site serves a single offer (config.php ['everflow']['offer_id'], 1072),
+ * so the only question is whether the visitor is attributed at all.
  */
 
 /**
@@ -16,8 +16,11 @@
  *
  * @param  string|null $affid  Raw ?affid= value (or the one stashed at submit).
  * @param  array       $cfg    config.php ['everflow'] block.
+ * @param  string|null $oid    The link's ?oid=. Ignored: the site's one offer
+ *                             always wins. Kept so existing callers still work.
  * @return string|null         Offer id, or null when the visitor must not be
- *                             sent to Everflow at all (no/blank affid).
+ *                             sent to Everflow at all (no/blank affid, or no
+ *                             offer configured).
  */
 function everflow_offer_for_affid(?string $affid, array $cfg, ?string $oid = null): ?string
 {
@@ -26,19 +29,9 @@ function everflow_offer_for_affid(?string $affid, array $cfg, ?string $oid = nul
         return null;    // unattributed traffic — Everflow stays untouched
     }
 
-    // An allowlisted ?oid= (config click_offer_overrides, e.g. 1067 email) wins
-    // over the affid split — must match assets/js/tracking/everflow.js, which
-    // reads the same list as clickOfferOverrides.
-    $oid = trim((string) $oid);
-    if ($oid !== '' && in_array($oid, array_map('strval', $cfg['click_offer_overrides'] ?? []), true)) {
-        return $oid;
-    }
+    $offerId = trim((string) ($cfg['offer_id'] ?? ''));
 
-    $firstParty = $cfg['first_party_affids'] ?? [];
-
-    return in_array($affid, $firstParty, true)
-        ? (string) ($cfg['offer_first_party'] ?? '')
-        : (string) ($cfg['offer_third_party'] ?? '');
+    return $offerId !== '' ? $offerId : null;
 }
 
 /**

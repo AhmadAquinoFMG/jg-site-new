@@ -232,9 +232,9 @@ if ($submitNonce !== null && isset($_SESSION['lead_nonces'][$submitNonce])) {
                       every field it finds can't downgrade a real lead into an
                       unbilled test one.
      ?affid=300       JG's test affiliate id (TEST_MODE_AFFIDS). Their QA link
-                      is ?oid=914&affid=300 — note the OFFER id plays no part
-                      here, since 914 is the live first-party offer that real
-                      links carry too.
+                      is ?oid=1072&affid=300 — note the OFFER id plays no part
+                      here, since 1072 is the live offer that real links
+                      carry too.
 
    Either way the lead is still validated, still stored and still posted — it
    just goes to LeadProsper flagged lp_action=test, so it lands in the
