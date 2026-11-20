@@ -67,11 +67,49 @@ a { color: var(--green-deep); }
     border-bottom: 1px solid var(--line);
 }
 .header-inner {
+    position: relative;
     padding: 22px 20px;
     display: flex;
     justify-content: center;
+    align-items: center;
 }
 .logo img { width: auto; height: 40px; }
+
+/* Click-to-call CTA, pinned top right. Absolutely positioned so the logo
+   stays centred exactly where it was. */
+.header-cta {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 4px;
+    background: var(--green);
+    color: var(--white);
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color .15s ease;
+}
+.header-cta:hover { background: var(--green-dark); }
+.header-cta:focus-visible { outline: 3px solid var(--track); outline-offset: 2px; }
+.header-cta-icon { flex: none; }
+.header-cta-label { display: none; }
+
+/* Phones: the logo moves left and the button shrinks to "Call Now" so the
+   two never overlap. */
+@media (max-width: 600px) {
+    .header-inner { justify-content: flex-start; padding: 16px; }
+    .logo img { height: 32px; }
+    .header-cta { right: 16px; padding: 9px 14px; font-size: 14px; }
+    .header-cta-label { display: inline; }
+    .header-cta-number { display: none; }
+}
 
 /* ----------------------------------------------------------------- funnel */
 .funnel {
