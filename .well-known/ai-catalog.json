@@ -1,0 +1,43 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "JG Wentworth Debt Relief",
+    "identifier": "did:web:jgdebtrelief.com",
+    "documentationUrl": "https://jgdebtrelief.com/llms.txt",
+    "logoUrl": "https://jgdebtrelief.com/assets/img/JG-Wentworth-logo-header.svg"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:jgdebtrelief.com:docs:llms-txt",
+      "displayName": "JG Wentworth Debt Relief site guide",
+      "type": "text/markdown",
+      "url": "https://jgdebtrelief.com/llms.txt",
+      "description": "Plain-language guide for AI agents: what the debt relief program is, the pages on this site, legal policies and contact details.",
+      "tags": ["debt relief", "debt settlement", "debt consolidation", "JG Wentworth"],
+      "capabilities": ["SiteGuide", "ProgramOverview", "ContactInfo"],
+      "representativeQueries": [
+        "how does JG Wentworth debt relief work",
+        "is the JG Wentworth debt relief program available in my state",
+        "JG Wentworth debt relief phone number"
+      ],
+      "version": "1.0.0",
+      "updatedAt": "2026-09-23T00:00:00Z"
+    },
+    {
+      "identifier": "urn:air:jgdebtrelief.com:web:debt-relief-application",
+      "displayName": "Debt Relief pre-qualification form",
+      "type": "text/html",
+      "url": "https://jgdebtrelief.com/",
+      "description": "Multi-step form that checks whether a visitor pre-qualifies for JG Wentworth's debt resolution program. Submitting it requires the visitor's own FCRA and TCPA consent, so an agent should hand this step to the person rather than submit it for them.",
+      "tags": ["debt relief", "pre-qualification", "application"],
+      "capabilities": ["DebtReliefPreQualification"],
+      "representativeQueries": [
+        "check if I pre-qualify for debt relief",
+        "apply for JG Wentworth debt relief",
+        "reduce and consolidate my credit card debt"
+      ],
+      "version": "1.0.0",
+      "updatedAt": "2026-09-23T00:00:00Z"
+    }
+  ]
+}

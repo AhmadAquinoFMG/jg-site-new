@@ -1,0 +1,35 @@
+<?php
+/* jgdebtrelief.com thank-you.php — browser Lead with the same event_id.
+ *
+ * thank-you.php currently loads NO Meta pixel. Add this block in <head>,
+ * before the TikTok block, so the Lead reaches the same two pixels the landing
+ * page inits. The id comes from the session that submit.php wrote; it is
+ * consumed once so a refresh does not fire a second Lead.
+ */
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+$jgLeadEventId = '';
+if (!empty($_SESSION['jgw_lead_event_id']) && (time() - (int) ($_SESSION['jgw_lead_event_at'] ?? 0)) < 1800) {
+    $jgLeadEventId = (string) $_SESSION['jgw_lead_event_id'];
+}
+unset($_SESSION['jgw_lead_event_id'], $_SESSION['jgw_lead_event_at']);
+?>
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;(b.head||b.documentElement).appendChild(t)}(window,document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1809915816237904');
+fbq('init', '9860760613990195');
+fbq('track', 'PageView');
+<?php if ($jgLeadEventId !== ''): ?>
+/* Same id as the Conversions API event submit.php sent → Meta dedupes. */
+fbq('track', 'Lead', { content_name: 'Debt Relief' }, { eventID: <?= json_encode($jgLeadEventId) ?> });
+<?php endif; ?>
+</script>
+<?php if ($jgLeadEventId !== ''): ?>
+<script>
+/* Give TikTok the same id too (ttq is loaded further down; calls queue). */
+window.ttq && ttq.track('CompleteRegistration', {}, { event_id: <?= json_encode($jgLeadEventId) ?> });
+</script>
+<?php endif; ?>

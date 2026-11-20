@@ -1,0 +1,22 @@
+{
+  "assets/js/funnel.js": {
+    "sha1": "9ac7323e182718cbcd9c05d9f937568f827356b8",
+    "min": "assets/dist/funnel.min.js"
+  },
+  "assets/js/tracking/attribution.js": {
+    "sha1": "cc51bd451a0aad03c07403c6b7ff6f58df37a42e",
+    "min": "assets/dist/attribution.min.js"
+  },
+  "assets/js/tracking/everflow.js": {
+    "sha1": "9d5f7e1b8984c1763d60f050b2ef7059c6f078ce",
+    "min": "assets/dist/everflow.min.js"
+  },
+  "assets/css/style.css": {
+    "sha1": "7485d648af45a64d035a2c0a8e825feb8a6baf2a",
+    "min": "assets/dist/style.min.css"
+  },
+  "assets/fonts/poppins-v24/faces.css": {
+    "sha1": "bd0af67b8bff72619727dd5b2eafef4f2735570b",
+    "min": "assets/dist/faces.min.css"
+  }
+}

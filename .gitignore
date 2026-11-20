@@ -1,0 +1,22 @@
+# Environment secrets
+.env
+.env.example
+.env.production.example
+
+# Operational logs (includes/logger.php)
+logs/
+
+# Everflow offerwall tracking-link cache (includes/everflow.php)
+cache/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# npm run build (tools/build-assets.mjs) dependencies
+node_modules/
+
+# Local-only files
+.claude/settings.local.json
+__pycache__/
+*.log

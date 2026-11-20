@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# Search-engine indexing
+#
+# Some hosts inject a global "X-Robots-Tag: noindex, nofollow" response header
+# that blocks crawling regardless of the page's <meta name="robots"> tag.
+# Strip it here so indexing is governed per-page by the meta tag instead
+# (index.php = indexable, thank-you.php = noindex). Requires mod_headers.
+# ---------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header unset X-Robots-Tag
+    Header always unset X-Robots-Tag
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# Agentic Resource Discovery (ARD) manifest. The file lives at
+# .well-known/ai-catalog.json (the legacy path agents and scanners check);
+# /.well-known/ard.json (the current spec path) and /ai-catalog.json are
+# served from the same file so there is one copy to maintain. Without this,
+# those URLs fall through to an HTML page and agents fail to parse them.
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^\.well-known/ard\.json$ .well-known/ai-catalog.json [L]
+    RewriteRule ^ai-catalog\.json$ .well-known/ai-catalog.json [L]
+</IfModule>
+
+<FilesMatch "^ai-catalog\.json$">
+    ForceType application/json
+    <IfModule mod_headers.c>
+        Header set Access-Control-Allow-Origin "*"
+        Header set Cache-Control "public, max-age=3600"
+    </IfModule>
+</FilesMatch>
+
+# ---------------------------------------------------------------------------
+# Block direct web access to dotenv files (secrets like GOOGLE_PLACES_KEY).
+# ---------------------------------------------------------------------------
+<FilesMatch "^\.env">
+    Require all denied
+</FilesMatch>

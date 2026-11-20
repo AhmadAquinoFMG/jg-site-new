@@ -1,0 +1,672 @@
+<?php
+
+/**
+ * JG Wentworth — post-submit "You're Pre-Qualified" page.
+ *
+ * Reached after the funnel form is submitted (funnel.js redirects here).
+ * Static confirmation screen: assigned-specialist messaging + a click-to-call
+ * CTA and a "your file is held for N:00" countdown timer (urgency device).
+ * Copy/hold-time come from config.php → ['prequal']. The CTA number comes from
+ * the `buyers` registry, not config: the matched buyer's `did`, else the `did` of
+ * the row named by ['prequal']['cta_buyer'].
+ */
+session_start();
+
+$cfg = require __DIR__ . '/config.php';
+require __DIR__ . '/includes/assets.php';
+$e   = fn($s) => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+
+$route = strtolower(trim((string) ($_GET['route'] ?? 'qualified')));
+if (!in_array($route, ['qualified', 'incharge', 'decline', 'bot', 'student', 'unverified'], true)) {
+    $route = 'qualified';
+}
+$declineOffer = (string) ($_GET['decline'] ?? '') === '1';
+$leadId = max(0, (int) ($_GET['lead_id'] ?? 0));
+/* 'unverified' ($0 or no credit read, see lead_routing_decision()) shares the
+   decline band's neutral copy and hides the savings estimate — nothing was
+   verified to pre-qualify against — but keeps JG's branding and DID and gets
+   no offerwall (that is driven by ?decline=, which this tier never sets). */
+$isLowDebtDecline = $route === 'decline' || $route === 'unverified';
+/* The student-loan band (see lead_routing_decision()). Not a decline — the lead
+   was sold — so it keeps the pre-qualified title, the buyer logo and the buyer's
+   own CALL NOW number, and gets no offerwall. */
+$isStudentRoute = $route === 'student';
+
+$pq        = $cfg['prequal'];
+$holdSecs  = max(1, (int) $pq['hold_minutes']) * 60;           // countdown seconds
+
+// Estimated savings (40% of the debt figure submit.php used), stashed in the
+// session by submit.php — never exposed in the URL, so it can't be edited or
+// replayed. Persists across reloads/bookmarks of this page; index.php clears
+// it when a visitor starts the funnel over. Absent/zero hides the callout.
+$estimatedSavings = max(0, (int) ($_SESSION['prequal_savings'] ?? 0));
+
+// Greeting name. Rides in the URL (config ['redirect']['params']) like ?buyer=,
+// so it is visitor-editable and decorative only — never read for anything that
+// matters. Capped so a hand-edited param can't blow out the heading.
+$firstName = mb_substr(trim((string) ($_GET['first_name'] ?? '')), 0, 40);
+
+/* Buyer logo. submit.php appends ?buyer=<name as LeadProsper reported it> to the
+   redirect — or, when LP named no buyer (off, bot, rejected, error), the
+   debt-band routing buyer as a stand-in. The `buyers` table says whether that
+   buyer has a logo and whether to show it. Null — no row, show_logo off (JG
+   Wentworth: the whole funnel is already JG-branded, so their logo here adds
+   nothing), no path, or the file is missing — renders nothing at all rather
+   than an empty slot.
+
+   Unlike prequal_savings this rides in the URL, so a visitor can hand-type
+   another buyer's name and see their logo. Fine for decoration; see the note in
+   includes/buyers.php before reading this param for anything that matters. */
+require_once __DIR__ . '/includes/buyers.php';
+require_once __DIR__ . '/includes/routing.php';    // lead_routing_buyer_matches()
+$buyerParam = (string) ($_GET['buyer'] ?? '');
+$isHouseAlias = false;
+foreach (array_merge(
+    $cfg['prequal']['house_aliases'] ?? [],
+    $cfg['prequal']['paused_buyers'] ?? []   // paused: fall back to the house row
+) as $alias) {
+    if (lead_routing_buyer_matches($buyerParam, (string) $alias)) {
+        $isHouseAlias = true;
+        break;
+    }
+}
+// A JG alias ('JG Debt Relief Under $10k') or a paused buyer resolves to no registry row, so the
+// CTA below falls through to the house row: JG's DID, JG's CallGrid source.
+$buyer = $isHouseAlias ? null : buyer_find($cfg, $buyerParam);
+if ($buyer === null && $route === 'incharge') {
+    $fallback = $cfg['lead_routing']['incharge_fallback'] ?? [];
+    if (is_array($fallback) && trim((string) ($fallback['did'] ?? '')) !== '') {
+        $buyer = [
+            'id' => 0,
+            'name' => (string) ($cfg['lead_routing']['incharge_buyer'] ?? 'InCharge'),
+            'label' => (string) ($fallback['label'] ?? 'InCharge Debt Solutions'),
+            'logo_path' => (string) ($fallback['logo_path'] ?? ''),
+            'did' => (string) $fallback['did'],
+            'use_callgrid' => !empty($fallback['use_callgrid']),
+            'show_logo' => !empty($fallback['show_logo']),
+        ];
+    }
+}
+$buyerLogo = buyer_logo_of($buyer);
+
+/* CTA number. Comes from the `buyers` registry — there is no CTA number in
+   config any more. The buyer that bought this lead gets their OWN number
+   (`buyers.did`): the consumer was just told which company took their file, so
+   the number under it should reach that company rather than one line shared by
+   every buyer.
+
+   With no ?buyer= to match — a direct hit on this page, LeadProsper off or
+   silent, a buyer not in the registry — the number comes from the row named by
+   ['prequal']['cta_buyer'] (JG). That row's `did` is the funnel's default, so
+   the table is the single place any CTA number is edited, and swapping the
+   default is an UPDATE rather than a deploy.
+
+   ['brand']['phone'] is the last resort, and only for a DB that can't answer or
+   a house row with no usable DID. It is JG's published line, so a database
+   outage degrades to a number that still reaches JG — untracked, but never a
+   dead button on the page the visitor just converted on.
+
+   On the house line (JG, and therefore every unmatched visit) that row's `did`
+   is JG's DID — what the page shows and dials from first paint, and what the
+   CallGrid pool falls back to when it can't assign. Change it with an UPDATE on
+   the JG row; it applies on the next page load.
+
+   On a buyer's OWN number (InCharge, DocuPop) nothing rewrites it, so it is the
+   number dialled too. */
+$houseName   = (string) ($pq['cta_buyer'] ?? $cfg['brand']['name']);
+$ctaBuyer    = $buyer ?? buyer_find($cfg, $houseName);
+$ctaOwnPhone = buyer_phone_of($ctaBuyer);                      // the row's own DID, or null
+$ctaPhone    = $ctaOwnPhone ?? (string) $cfg['brand']['phone'];
+$ctaTel      = phone_tel_href($ctaPhone);                      // tel: href, E.164
+
+/* Whether the number that ended up on the button is one of OURS: the house
+   row's DID, or ['brand']['phone'] when the row named no usable one. False only
+   when a buyer's own published line is on the button. This, not the
+   use_callgrid flag alone, is what the number pool below is gated on — see
+   there. */
+$ctaIsHouseNumber = $ctaOwnPhone === null || buyer_is_house($ctaBuyer, $houseName);
+
+/* JG's page with no usable DID from the table — DB down, no JG row, or a blank
+   or malformed `did` — falls back to ['prequal']['jg_did'] rather than
+   ['brand']['phone']. The row stays authoritative whenever it answers. */
+$ctaIsJg = buyer_is_house($ctaBuyer, $houseName);
+$jgDid   = ($ctaIsJg && $ctaOwnPhone === null)
+    ? buyer_phone_of(['name' => 'jg_did', 'did' => (string) ($pq['jg_did'] ?? '')])
+    : null;
+if ($jgDid !== null) {
+    $ctaPhone = $jgDid;
+    $ctaTel   = phone_tel_href($ctaPhone);
+}
+
+/* Everflow conversion. submit.php stashes the affid here only after it accepted
+   the lead, so this can't fire for a visitor who merely opened the page. The
+   offer comes from that affid (includes/everflow.php); no affid stashed means
+   no offer and nothing is sent to Everflow at all.
+
+   Consumed on read — unset before rendering, so reloading or bookmarking this
+   page can't fire a second conversion for the same lead. Unlike prequal_savings
+   (which persists deliberately so the savings callout survives a reload), a
+   duplicated conversion would be a billing event. */
+require_once __DIR__ . '/includes/everflow.php';
+require_once __DIR__ . '/includes/redirect.php';   // redirect_param_names(), for the CallGrid tags below
+require_once __DIR__ . '/includes/routing.php';
+
+$offerwallUrl = $declineOffer
+    ? decline_offerwall_url($_GET, $cfg['lead_routing'] ?? [])
+    : null;
+
+/* TEMPORARILY DISABLED: LeadProsper owns Everflow conversion firing. The
+   original session read is preserved for rollback; forcing null prevents this
+   page from rendering/loading the EF.conversion() block below. */
+$efConversion = null;
+// $efConversion = $_SESSION['ef_conversion'] ?? null;
+unset($_SESSION['ef_conversion']);
+
+$efOfferId = $efConversion
+    ? everflow_offer_for_affid($efConversion['affid'] ?? '', $cfg['everflow'], $efConversion['oid'] ?? '')
+    : null;
+$efTransactionId = (string) ($efConversion['transaction_id'] ?? '');
+
+/* CallGrid call tracking — only page that carries a click-to-call CTA, so the
+   only page where a swappable tracking number matters. Disabled (and not
+   emitted at all) when either id is missing, so a half-configured environment
+   can't load the SDK with a blank organization.
+
+   Also off whenever the button is NOT carrying one of our own numbers — any
+   buyer showing a `did` of their own (InCharge, DocuPop), whatever their
+   use_callgrid flag says. Nothing below is emitted, so the SDK never loads, no
+   pooled number is assigned, and the CTA keeps the buyer's own DID as both the
+   number shown and the number dialled. Putting our pool in front of a line the
+   buyer already owns would re-route a call they paid for and book it against a
+   campaign source that isn't ours — and use_callgrid defaults to 1, so a buyer
+   added without anyone thinking about the flag must not be opted in by omission.
+
+   A matched buyer with no usable DID is still tracked: the button fell back to
+   the house number, which is ours to layer a pooled DID on. $ctaIsHouseNumber
+   above is the one that knows the difference; buyer_uses_callgrid() stays as the
+   explicit per-row switch. Both read $ctaBuyer, not the matched buyer, so they
+   always describe the row whose number is actually on the button — including
+   the house row that backs an unmatched visit.
+
+   The one exception is a buyer listed in ['callgrid']['buyer_sources'] (United):
+   their DID is itself a CallGrid line on their own campaign, so the SDK loads
+   with THAT campaign source rather than JG's, and the call carries the session
+   tags like a JG call does. */
+$cg = $cfg['callgrid'];
+$cgSourceId = '';
+if ($ctaIsHouseNumber) {
+    $cgSourceId = (string) $cg['campaign_source_id'];
+} elseif ($ctaBuyer !== null) {
+    foreach (($cg['buyer_sources'] ?? []) as $sourceBuyer => $sourceId) {
+        if (strcasecmp(trim((string) $sourceBuyer), trim($ctaBuyer['name'])) === 0) {
+            $cgSourceId = trim((string) $sourceId);
+            break;
+        }
+    }
+}
+$cgOn = $cg['enabled'] && $cg['organization_id'] !== '' && $cgSourceId !== ''
+    && buyer_uses_callgrid($ctaBuyer);
+
+/* CallGrid custom tags — the lead's details, forwarded so its webhook template
+   ([[tag:lead_id]], [[tag:email]], …) resolves against a real call.
+
+   These have to be handed over explicitly. callgrid.js does NOT read the query
+   string for tags: it pulls `utm_source` out of location.search and nothing
+   else, and its only custom-tag inputs are this data-tags attribute and an
+   addTags() method on an instance auto-init keeps private. So the params
+   submit.php put in the redirect are read back here and passed through.
+
+   The names come from the redirect config rather than a second hardcoded list,
+   so adding a param there is enough to start sending it. Values are capped —
+   a tag is a short attribute, and the whole set rides in one HTML attribute. */
+$cgTags = [];
+if ($cgOn) {
+    foreach (redirect_param_names($cfg['redirect'] ?? []) as $name) {
+        $value = trim((string) ($_GET[$name] ?? ''));
+        if ($value !== '') {
+            $cgTags[$name] = substr($value, 0, 255);
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+    <meta name="robots" content="noindex, nofollow">
+    <title><?= $e($cfg['brand']['name']) ?> — <?= $isLowDebtDecline ? 'Thank You' : "You're Pre-Qualified" ?></title>
+    <link rel="icon" type="image/png" href="assets/img/jg-icon.png?v=<?= $e($cfg['asset_version']) ?>">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <?php if ($cgOn): ?>
+        <link rel="preconnect" href="https://cdn.callgrid.com" crossorigin><?php endif; ?>
+    <link rel="stylesheet" href="<?= $e(asset_min('assets/css/style.css')) ?>?v=<?= $e($cfg['asset_version']) ?>">
+
+    <?php include __DIR__ . '/includes/analytics.php'; ?>
+    <?php /* The conversion, reported to TikTok. Gated on lead_id, which only
+             submit.php puts on the redirect, so a direct visit or a refresh
+             after the query string was dropped reports nothing. route=bot is
+             excluded for the same reason the honeypot exists.
+
+             NOT gated on a buyer accepting the lead: that is a different
+             question and the wrong one here. A rejected or duplicate lead is
+             still a person who completed this funnel, and completion is what
+             the bid is being optimised toward. */ ?>
+    <?php /* Match keys for that event. The two identifiers TikTok weighs most,
+             and the only page in the funnel that holds them: submit.php built
+             this redirect from the STORED lead row (config ['redirect']['params']),
+             so ?email= and ?phone= are the server's normalised copies of what
+             the consumer typed, not whatever the browser felt like sending.
+
+             Handed over in plaintext and hashed inside the include — see the
+             EMQ section there. Read straight from $_GET rather than through
+             $e(): these are never printed, only SHA-256'd, and escaping them
+             for HTML first would change the bytes being hashed and produce a
+             match key for a person who does not exist.
+
+             Visitor-editable, like every other param on this URL. That is
+             tolerable here in a way it is not for routing or savings: a
+             hand-edited address can only make this event match nobody, which
+             is where it started. Anything that normalises badly is dropped by
+             the include rather than sent as a bad key. */ ?>
+    <?php $tiktokIdentify = ($leadId > 0 && $route !== 'bot')
+        ? ['email' => (string) ($_GET['email'] ?? ''), 'phone' => (string) ($_GET['phone'] ?? '')]
+        : []; ?>
+    <?php /* event_id is derived from the lead row, not randomised, so a server
+             -side copy of this event (TikTok Events API) can compute the same
+             id from the same lead and be deduped against this one instead of
+             doubling the conversion count. It also makes a refresh of this page
+             idempotent: same lead, same id, one conversion. */ ?>
+    <?php $tiktokEvents = ($leadId > 0 && $route !== 'bot')
+        ? [['CompleteRegistration', [], 'lead-' . $leadId]]
+        : []; ?>
+    <?php include __DIR__ . '/includes/tiktok.php'; ?>
+    <?php include __DIR__ . '/includes/track.php'; ?>
+
+    <!-- Funnel completion. This is the report's authoritative "completed" signal:
+         it only fires after submit.php accepted the lead and funnel.js redirected
+         here, and it fires from a fresh pageview rather than from a beacon racing
+         that redirect — so it can't be undercounted the way event_submit_attempt can.
+         See bin/funnel-slack-report.php. -->
+    <script>
+        jgTrack('event_view_thank_you', {
+            has_savings: <?= $estimatedSavings > 0 ? 'true' : 'false' ?>,
+            estimated_savings: <?= (int) $estimatedSavings ?>,
+            routing_tier: <?= json_encode($route) ?>,
+            decline_offer: <?= $declineOffer ? 'true' : 'false' ?>
+        });
+    </script>
+
+    <?php /* Attribution — restores the session's tracking params (utm_* included)
+             onto this page's URL. submit.php builds this redirect from the stored
+             lead row, which carries no utm params, so without this the page loses
+             the campaign the visitor arrived on. Kept in <head> and ahead of the
+             CallGrid block below on purpose: callgrid.js reads utm_source off
+             location.search when it initialises, and it can only read what's
+             already there. */ ?>
+    <script>
+        window.FUNNEL = window.FUNNEL || {};
+        window.FUNNEL.attribution = <?= json_encode($cfg['attribution'] ?? [], JSON_UNESCAPED_SLASHES | JSON_FORCE_OBJECT) ?>;
+    </script>
+    <script src="<?= $e(asset_min('assets/js/tracking/attribution.js')) ?>?v=<?= $e($cfg['asset_version']) ?>"></script>
+
+    <?php /* Everflow conversion — fires against the offer this lead's affid maps
+             to (914 first party / 915 third party). Rendered only when an affid
+             was stashed at submit; unattributed leads emit nothing at all.
+
+             transaction_id is passed explicitly when the landing-page click
+             managed to resolve one, since that's a firmer match than letting the
+             SDK re-read the tracking cookie. When it's blank we omit the key and
+             fall back to the cookie, which is the SDK's normal path. */ ?>
+    <?php if ($efOfferId): ?>
+        <?php
+        $efPayload = ['offer_id' => $efOfferId];
+        if ($efTransactionId !== '') {
+            $efPayload['transaction_id'] = $efTransactionId;
+        }
+        ?>
+        <!-- <script type="text/javascript" src="https://<?= $e($cfg['everflow']['domain']) ?>/scripts/everflow.js"></script>
+        <script type="text/javascript">
+            // TEMPORARILY DISABLED — LeadProsper fires the buyer-specific conversion.
+            // EF.conversion(<?= json_encode($efPayload, JSON_UNESCAPED_SLASHES) ?>);
+        </script> -->
+    <?php endif; ?>
+
+    <?php if ($cgOn): ?>
+        <?php /* CallGrid — injected rather than hard-coded as a <script src> so the
+                 guard can run: the SDK misbehaves if it's loaded twice, and a
+                 bfcache restore or a second include would otherwise do exactly
+                 that. loadCallGrid() is idempotent and safe to call again. */ ?>
+        <script>
+            function loadCallGrid() {
+                if (document.querySelector('script[src*="callgrid.com"]')) return;
+
+                const script = document.createElement('script');
+                script.src = <?= json_encode($cg['src'], JSON_UNESCAPED_SLASHES) ?>;
+                script.dataset.organizationId = <?= json_encode($cg['organization_id']) ?>;
+                script.dataset.campaignSourceId = <?= json_encode($cgSourceId) ?>;
+                <?php if ($cgTags !== []): ?>
+                    // Read as JSON by the SDK's config parser; it warns and drops
+                    // the lot on a parse error, so it must survive a round trip
+                    // through the attribute intact.
+                    script.dataset.tags = <?= json_encode(json_encode($cgTags, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) ?>;
+                <?php endif; ?>
+                script.async = true;
+                document.head.appendChild(script);
+            }
+
+            /* Number pool — swap the CTA to the DID CallGrid assigns this
+               visitor, so an inbound call carries the session (and therefore the
+               data-tags above) instead of landing on the one shared number.
+
+               Registered BEFORE loadCallGrid() and on `document`, because
+               callgrid:numberAssigned is a one-shot: the SDK can dispatch it as
+               soon as its request comes back, and a listener attached later in
+               the body would simply never hear it. The CTA itself doesn't exist
+               yet at this point in <head>, so the number is held and applied
+               once the DOM is up.
+
+               This whole block is absent for a buyer with use_callgrid = 0, so
+               nothing here can touch a buyer-owned line.
+
+               This handler swaps only the tel: target, but the SDK's own DNI
+               rewrites every phone number on the page (text and tel: links, bar
+               anything under data-no-dni) to the pooled DID once one is assigned,
+               and restores the originals when it's released. So the label reads
+               the pooled number while one is held, and the server-rendered
+               number (JG's DID on JG's page — see $ctaIsJg) otherwise.
+
+               The button is NOT hidden until assignment. It ships rendered and
+               dialable with that number, so it survives a blocked/slow SDK and
+               JS being off, and the money CTA never shifts or sits dead under
+               the visitor's thumb. A tap inside the assignment window reaches
+               JG's DID — that call just isn't attributable.
+
+               When the pool can't assign — every number taken (the SDK throws
+               "No available numbers" and never fires numberAssigned), the SDK
+               blocked or slow, or the number released on idle — the tel: target
+               goes back to that server-rendered number. */
+            (function() {
+                var assigned = '';
+                var fallback = <?= json_encode($ctaTel) ?>;
+                var numberAssignmentTimer;
+
+                function applyNumber() {
+                    var link = document.getElementById('call-now');
+                    if (!link) return;
+
+                    var numberToUse = assigned || fallback;
+                    if (!numberToUse) return;
+
+                    link.href = 'tel:' + numberToUse.replace(/[^\d+]/g, '');
+                }
+
+                function ensureNumber() {
+                    if (assigned) return;
+                    // If pool didn't assign a number within 1.5s, use the original
+                    numberAssignmentTimer = setTimeout(function() {
+                        if (!assigned) applyNumber();
+                    }, 1500);
+                }
+
+                document.addEventListener('callgrid:numberAssigned', function(event) {
+                    var number = event && event.detail && event.detail.phoneNumber;
+                    if (!number) return;
+
+                    assigned = String(number).trim();
+                    clearTimeout(numberAssignmentTimer);
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', applyNumber, {
+                            once: true
+                        });
+                    } else {
+                        applyNumber();
+                    }
+                });
+
+                // Idle timeout: the SDK hands the pooled number back and restores
+                // the link to the house line. Drop it here too, so neither this
+                // nor a bfcache restore re-applies a number another visitor may
+                // now hold, and dial JG's DID until returnFromIdle reassigns.
+                document.addEventListener('callgrid:numberReleased', function() {
+                    assigned = '';
+                    applyNumber();
+                });
+
+                // Fallback when number pool is exhausted or SDK doesn't respond:
+                // dial JG's DID after a timeout
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', ensureNumber);
+                } else {
+                    ensureNumber();
+                }
+
+                // A bfcache restore re-runs no scripts and re-fires no events,
+                // but it does rebuild the DOM from the snapshot — reassert the
+                // pooled number (or fallback) so a back-navigation doesn't silently
+                // revert the CTA to the static one.
+                window.addEventListener('pageshow', function(event) {
+                    if (event.persisted) applyNumber();
+                });
+            })();
+
+            loadCallGrid();
+        </script>
+    <?php endif; ?>
+</head>
+
+<body>
+
+    <?php include __DIR__ . '/includes/header.php'; ?>
+
+    <main class="funnel">
+        <div class="funnel-inner prequal">
+
+            <!-- Hero: confirmation -->
+            <div class="prequal-check" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="34" height="34" fill="none"
+                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5" />
+                </svg>
+            </div>
+
+            <?php if ($isLowDebtDecline): ?>
+                <h1 class="prequal-title">Thank You&mdash;We Received Your Information</h1>
+                <p class="prequal-lede">A debt specialist is still available to discuss your situation and answer your questions.</p>
+            <?php else: ?>
+                <h1 class="prequal-title">Congratulations<?= $firstName !== '' ? ', ' . $e($firstName) : '' ?>!</h1>
+                <p class="prequal-lede">You&rsquo;re pre-qualified for a debt relief program.</p>
+            <?php endif; ?>
+
+            <?php /* Suppressed on the student band. The figure is 40% of the
+                     UNSECURED total, which for a consumer routed here on a
+                     student-loan balance is a different debt and often a trivial
+                     one — quoting "$800" to someone sold on $40k of student loans
+                     is worse than quoting nothing. A student-loan figure does not
+                     belong here either: what DocuPop can do with a balance is
+                     theirs to state, not ours to estimate. */ ?>
+            <?php if (!$isLowDebtDecline && !$isStudentRoute && $estimatedSavings > 0): ?>
+                <div class="prequal-savings">
+                    <span class="prequal-savings__label">You could save an estimated:</span>
+                    <span class="prequal-savings__amount">$<?= $e(number_format($estimatedSavings)) ?></span>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($declineOffer && $offerwallUrl !== null): ?>
+                <aside class="prequal-options" aria-label="Additional financial options">
+                    <strong>We&rsquo;ve also prepared additional options for you.</strong>
+                    <span>The decline options will open in a separate tab while this page remains open.</span>
+                    <a href="<?= $e($offerwallUrl) ?>" target="jg-decline-options" rel="noopener">View additional options</a>
+                </aside>
+            <?php endif; ?>
+
+            <?php if ($buyerLogo !== null): ?>
+                <!-- Buyer match, below the CTA card. Deliberately AFTER the call
+                     button: the visitor's next action is the call, and naming the
+                     provider above it competes with that. Sits on its own rather
+                     than inside the card so it reads as a fact about the match,
+                     not another line of the call-now pitch. -->
+                <div class="prequal-buyer">
+                    <span class="prequal-buyer__label">You have been matched with</span>
+                    <img class="prequal-buyer__logo" src="<?= $e($buyerLogo['path']) ?>"
+                        alt="<?= $e($buyerLogo['label']) ?>" loading="lazy" decoding="async">
+                </div>
+            <?php endif; ?>
+
+
+            <!-- Assigned specialist -->
+            <!-- <div class="prequal-assigned">
+                <span class="prequal-assigned__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none"
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M19 8l2 2 3-3" />
+                    </svg>
+                </span>
+                <div class="prequal-assigned__body">
+                    <h2 class="prequal-assigned__title">A Certified Debt Specialist Has Been Assigned to You</h2>
+                    <p>They&rsquo;re ready to walk you through your best options for becoming debt free.</p>
+                </div>
+            </div> -->
+
+            <!-- Call CTA card -->
+            <section class="prequal-card" aria-label="Speak with your specialist">
+                <h2 class="prequal-card__title">Speak With Your Specialist Now</h2>
+                <p class="prequal-card__sub">Your estimate is reserved, but availability is limited.</p>
+
+                <!-- The money click. Umami's declarative tracking holds the tel:
+                     navigation until the event is away, so this survives the dialer
+                     opening. Reported as "Called" (share of completions). -->
+                <a class="prequal-call" id="call-now" href="tel:<?= $e($ctaTel) ?>"
+                    data-umami-event="event_call_click">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+                    </svg>
+                    <?php /* Two spans so the narrow-screen rule can stack the label
+                             above the number, instead of letting the button wrap
+                             mid-number ("(888) 471-" / "0463"). */ ?>
+                    <span class="prequal-call__label">
+                        <span class="prequal-call__cta">CALL NOW:</span>
+                        <span class="prequal-call__number"><?= $e($ctaPhone) ?></span>
+                    </span>
+                </a>
+
+                <!-- Hold timer -->
+                <div class="prequal-hold" data-hold-secs="<?= $e($holdSecs) ?>">
+                    <?php /* Icon + label ride together on their own row so the clock
+                             below them lands dead centre of the card at every width. */ ?>
+                    <div class="prequal-hold__head">
+                        <span class="prequal-hold__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="13" r="8" />
+                                <path d="M12 9v4l2.5 2.5" />
+                                <path d="M9 2h6" />
+                            </svg>
+                        </span>
+                        <p class="prequal-hold__label">Your specialist is holding your file for:</p>
+                    </div>
+                    <div class="prequal-hold__clock" role="timer" aria-live="off">
+                        <span class="prequal-hold__unit"><strong id="holdMin"><?= $e(sprintf('%02d', intdiv($holdSecs, 60))) ?></strong><small>MIN</small></span>
+                        <span class="prequal-hold__colon">:</span>
+                        <span class="prequal-hold__unit"><strong id="holdSec"><?= $e(sprintf('%02d', $holdSecs % 60)) ?></strong><small>SEC</small></span>
+                    </div>
+                    <p class="prequal-hold__note">After this, you may need to re-qualify.</p>
+                </div>
+
+                <ul class="prequal-assurances">
+                    <li>
+                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <path d="M9 12l2 2 4-4" />
+                        </svg>
+                        Takes less than 10 minutes
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M9 12l2 2 4-4" />
+                        </svg>
+                        No obligation
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3" y="11" width="18" height="11" rx="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        Free consultation
+                    </li>
+                </ul>
+            </section>
+
+
+
+            <!-- Legal disclosures, shown in the page body (also present in the footer). -->
+            <!-- <section class="prequal-disclosures" aria-label="Program disclosures">
+                <?php foreach ($cfg['disclosures'] as $para): ?>
+                    <p><?= $para /* trusted static HTML (may contain links) */ ?></p>
+                <?php endforeach; ?>
+            </section> -->
+
+        </div>
+    </main>
+
+    <?php include __DIR__ . '/includes/footer.php'; ?>
+
+    <script>
+        /* Hold-file countdown — counts the [data-hold-secs] value down to 00:00. */
+        (function() {
+            var box = document.querySelector('.prequal-hold');
+            if (!box) return;
+            var minEl = document.getElementById('holdMin');
+            var secEl = document.getElementById('holdSec');
+            var left = parseInt(box.getAttribute('data-hold-secs'), 10) || 0;
+
+            function pad(n) {
+                return (n < 10 ? '0' : '') + n;
+            }
+
+            function paint() {
+                minEl.textContent = pad(Math.floor(left / 60));
+                secEl.textContent = pad(left % 60);
+            }
+            paint();
+            var t = setInterval(function() {
+                if (left <= 0) {
+                    clearInterval(t);
+                    return;
+                }
+                left--;
+                paint();
+            }, 1000);
+        })();
+    </script>
+    <?php if ($declineOffer && $offerwallUrl !== null): ?>
+        <script>
+            /* Match the TDO flow: the original/main tab is already the TY page.
+               After 1.5 seconds, make one isolated offerwall open with no opener
+               relationship and no focus/blur calls. TY remains untouched. */
+            (function() {
+                var openedKey = 'jg_offerwall_opened_<?= (int) $leadId ?>';
+                var offerwallUrl = <?= json_encode($offerwallUrl, JSON_UNESCAPED_SLASHES) ?>;
+
+                setTimeout(function() {
+                    try {
+                        if (sessionStorage.getItem(openedKey) === '1') return;
+
+                        sessionStorage.setItem(openedKey, '1');
+                        window.open(offerwallUrl, '_blank', 'noopener,noreferrer');
+                    } catch (ignore) {}
+                }, 1500);
+            })();
+        </script>
+    <?php endif; ?>
+</body>
+
+</html>
