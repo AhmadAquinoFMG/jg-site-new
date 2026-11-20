@@ -30,7 +30,6 @@ if ($showCta) {
                 <span class="header-cta-label">Speak with a debt specialist</span>
                 <span class="header-cta-number"><?= htmlspecialchars($ctaPhone) ?></span>
             </span>
-            <span class="header-cta-short">Call Now</span>
         </a>
         <?php endif; ?>
     </div>

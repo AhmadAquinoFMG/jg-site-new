@@ -119,22 +119,38 @@ a { color: var(--green-deep); }
 }
 .header-cta-label { font-size: 12px; font-weight: 400; letter-spacing: .01em; opacity: .92; }
 .header-cta-number { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
-.header-cta-short { display: none; }
 
 /* Tablets: the two-line box would crowd the centred logo, so the logo moves
-   left to give it room. */
+   left and shrinks a little to give it room. */
 @media (max-width: 900px) {
     .header-inner { justify-content: flex-start; }
+    .logo img { height: 32px; }
 }
 
-/* Phones: the button shrinks to "Call Now" so it never overlaps the logo. */
+/* Phones: logo and button share one row (flex, not absolute), so they can
+   never overlap. The button keeps its full "Speak with a debt specialist" +
+   number, scaled down; the logo shrinks to make room. */
 @media (max-width: 600px) {
-    .header-inner { padding: 16px; }
-    .logo img { height: 32px; }
-    .header-cta { right: 16px; gap: 8px; padding: 6px 14px 6px 6px; font-size: 14px; }
-    .header-cta-icon { width: 16px; height: 16px; padding: 6px; }
-    .header-cta-text { display: none; }
-    .header-cta-short { display: inline; }
+    .header-inner { justify-content: space-between; gap: 10px; padding: 12px 16px; }
+    .logo { flex: none; }
+    .logo img { height: 22px; }
+    .header-cta {
+        position: static;
+        transform: none;
+        gap: 8px;
+        padding: 6px 12px 6px 6px;
+    }
+    .header-cta-icon { width: 14px; height: 14px; padding: 6px; }
+    .header-cta-text { gap: 3px; }
+    .header-cta-label { font-size: 10.5px; }
+    .header-cta-number { font-size: 14px; }
+}
+
+/* Very narrow phones (≤360px): drop the icon badge so the text still fits. */
+@media (max-width: 360px) {
+    .logo img { height: 20px; }
+    .header-cta { padding: 6px 10px; }
+    .header-cta-icon { display: none; }
 }
 
 /* ----------------------------------------------------------------- funnel */
