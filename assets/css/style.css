@@ -84,25 +84,41 @@ a { color: var(--green-deep); }
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 18px;
+    gap: 12px;
+    padding: 8px 20px 8px 10px;
     border-radius: 4px;
     background: var(--green);
     color: var(--white);
     font-weight: 600;
     font-size: 15px;
-    line-height: 1.2;
+    line-height: 1;
     text-decoration: none;
     white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
     transition: background-color .15s ease;
 }
 .header-cta:hover { background: var(--green-dark); }
 .header-cta:focus-visible { outline: 3px solid var(--track); outline-offset: 2px; }
-.header-cta-icon { flex: none; }
-/* Two lines: small label over the number. */
-.header-cta-text { display: flex; flex-direction: column; align-items: flex-start; }
-.header-cta-label { font-size: 12px; font-weight: 500; opacity: .9; }
-.header-cta-number { font-size: 16px; font-weight: 700; }
+/* Phone icon in a soft round badge, so it reads as part of the button rather
+   than floating beside the text. */
+.header-cta-icon {
+    flex: none;
+    box-sizing: content-box;
+    width: 18px;
+    height: 18px;
+    padding: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .18);
+}
+/* Two lines: lighter label over the number, with a little air between. */
+.header-cta-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+}
+.header-cta-label { font-size: 12px; font-weight: 400; letter-spacing: .01em; opacity: .92; }
+.header-cta-number { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
 .header-cta-short { display: none; }
 
 /* Tablets: the two-line box would crowd the centred logo, so the logo moves
@@ -115,7 +131,8 @@ a { color: var(--green-deep); }
 @media (max-width: 600px) {
     .header-inner { padding: 16px; }
     .logo img { height: 32px; }
-    .header-cta { right: 16px; padding: 9px 14px; font-size: 14px; }
+    .header-cta { right: 16px; gap: 8px; padding: 6px 14px 6px 6px; font-size: 14px; }
+    .header-cta-icon { width: 16px; height: 16px; padding: 6px; }
     .header-cta-text { display: none; }
     .header-cta-short { display: inline; }
 }
